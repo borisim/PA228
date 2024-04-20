@@ -15,12 +15,14 @@ import numpy as np
 
 import glob
 
-dataset_path = "/home/borisim/Documents/school/pa228/project/Project_Template/PROJCODE_UCO/data"
+# dataset_path = "/home/borisim/Documents/school/pa228/project/Project_Template/PROJCODE_UCO/data"
+dataset_path = 'C:/Users/xboril/Documents/proj/PA228/data'
 PATH = Path('{}'.format(dataset_path), 'data_seg_public')
 img_dir = PATH / 'img'
 mask_dir = PATH / 'mask'
 img_files = glob.glob("{}/*/*.png".format(img_dir))
 mask_files = glob.glob("{}/*/*.png".format(mask_dir))
+print(len(img_files))
 df = pd.DataFrame({'img': img_files, 'mask': mask_files})
 
 import albumentations as A
@@ -41,10 +43,11 @@ traindataset, valdataset = SampleDataset(train_df, transforms), SampleDataset(va
 
 
 
-model_path = 'model.pt'  # an example of model_path parameter
-model = torch.load(model_path)
-model.eval()
+# model_path = 'model.pt'  # an example of model_path parameter
+# model = torch.load(model_path)
+# model.eval()
 
+model = SampleModel(num_class=8)
 IDX = 2285
 x, y = traindataset[IDX]
 pred = model(x.unsqueeze(0))

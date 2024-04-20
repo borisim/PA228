@@ -27,7 +27,7 @@ class SampleDataset(Dataset):
 
         transformed = self.transform(image=img, mask=ann)
         res_img = transformed['image']
-        res_mask = (transformed['mask'] - 1).type(torch.long)
+        res_mask = (transformed['mask']).type(torch.long) # -1
         
         return res_img, res_mask  
 

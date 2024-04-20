@@ -38,15 +38,6 @@ def plot_learning_curves(train_losses, validation_losses):
     plt.legend()
     plt.savefig("learning_curves.png")
 
-def loss_batch(model, loss_func, xb, yb, opt=None):
-    loss = loss_func(model(xb), yb)
-
-    if opt is not None:
-        loss.backward()
-        opt.step()
-        opt.zero_grad()
-
-    return loss.item(), len(xb)
 
 # sample function for training
 def fit(net, batch_size, epochs, trainloader, validloader, loss_fn, optimizer, device):
@@ -54,7 +45,9 @@ def fit(net, batch_size, epochs, trainloader, validloader, loss_fn, optimizer, d
     validation_losses = []
 
     for epoch in tqdm(range(epochs), 'epochs'):
+        print('training')
         loss = train(net, trainloader, loss_fn, device, optimizer)
+        print('validating')
         val_loss = validate(net, validloader, loss_fn, device)
 
         train_losses.append(loss)
@@ -87,7 +80,7 @@ def training(dataset_path):
 
     # config dictionary
     config = {
-    'batch_size': 4,
+    'batch_size': 2,
     'epoch': 1,
     'num_workers': 1,
     'dropout': 0.5,
@@ -129,7 +122,7 @@ def training(dataset_path):
                       num_workers=config['num_workers'])
 
 
-    net = SampleModel()
+    net = SampleModel(num_class=8)
     # input_sample = torch.zeros((1, 512, 1024))
     # draw_network_architecture(net, input_sample)
 
@@ -137,7 +130,7 @@ def training(dataset_path):
     optimizer = torch.optim.Adam(net.parameters(), lr=config['lr'])
 
     # define loss function
-    loss_fn = torch.nn.CrossEntropyLoss()
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=2)
 
     # train the network for three epochs
     tr_losses, val_losses = fit(net, config['batch_size'], config['epoch'], trainloader, valloader, loss_fn, optimizer, device)

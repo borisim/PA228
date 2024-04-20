@@ -34,7 +34,13 @@ def ishow(img,
 def loss_batch(model, loss_func, xb, yb, dev, opt=None):
     
     xb, yb = xb.to(dev), yb.to(dev)
-    loss = loss_func(model(xb), yb)
+    pred = model(xb)
+    print('got_out')
+    yb = yb.argmax(dim=3)
+    # print(yb.shape)
+    # print(pred.shape)
+    print('loss')
+    loss = loss_func(pred, yb)
 
     if opt is not None:
         loss.backward()
@@ -49,8 +55,10 @@ def train(model, train_dl, loss_func, dev, opt):
         model.train()
         loss, size = 0, 0
         for b_idx, (xb, yb) in tqdm(enumerate(train_dl), total=len(train_dl), leave=False):
+            print('batching')
             b_loss, b_size = loss_batch(model, loss_func, xb, yb, dev, opt)
-            
+            print('done batching')
+
             loss += b_loss * b_size
             size += b_size
             
