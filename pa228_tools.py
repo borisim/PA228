@@ -30,17 +30,22 @@ def ishow(img,
         fig.colorbar(pcm, orientation='vertical')
     plt.show()
     
+def pred_loss_prep(xb):
+    softmax = torch.nn.functional.softmax(xb, dim=1)
+    argmax = torch.argmax(softmax, dim=1)
+
+    binary_masks = torch.zeros_like(xb)
+    for class_index in range(xb.shape[1]):
+        class_mask = (argmax == class_index).float()
+        binary_masks[:, class_index, :, :] = class_mask
+
+    return binary_masks
+
 
 def loss_batch(model, loss_func, xb, yb, dev, opt=None):
-    
     xb, yb = xb.to(dev), yb.to(dev)
-    pred = model(xb)
-    print('got_out')
-    yb = yb.argmax(dim=3)
-    # print(yb.shape)
-    # print(pred.shape)
-    print('loss')
-    loss = loss_func(pred, yb)
+    # loss = loss_func(model(xb), yb)
+    loss = loss_func(model(xb), yb)
 
     if opt is not None:
         loss.backward()
@@ -55,12 +60,11 @@ def train(model, train_dl, loss_func, dev, opt):
         model.train()
         loss, size = 0, 0
         for b_idx, (xb, yb) in tqdm(enumerate(train_dl), total=len(train_dl), leave=False):
-            print('batching')
             b_loss, b_size = loss_batch(model, loss_func, xb, yb, dev, opt)
-            print('done batching')
-
             loss += b_loss * b_size
             size += b_size
+            
+            print(b_idx)
             
         return loss / size
     
@@ -91,7 +95,7 @@ def plot_seg_result(pred):
     for i in range(n_classes):
         plot = axes[i].imshow(images[i].squeeze())
         axes[i].set_title(f'prediction - channel {i}')
-        plt.colorbar(plot, ax=axes[i])      
+        # plt.colorbar(plot, ax=axes[i])      
         
     plt.show()
 
@@ -112,13 +116,61 @@ def show_seg_sample(sample):
     ax2.imshow(mask)
     ax2.set_title('GT labels')
     plt.show()
-# # training step
-#         loss = train(model, train_dl, loss_func, dev, opt)
-#         # evaluation step
-#         val_loss = validate(model, valid_dl, loss_func, dev)
 
-#         # Log metrics with MLflow
-#         mlflow.log_metric("training_loss", loss, step=epoch)
-#         mlflow.log_metric("validation_loss", val_loss, step=epoch)
-        
-#         print(f'epoch {epoch+1}/{epochs}, loss: {loss : .05f}, validation loss: {val_loss:.05f}')
+
+def plot_pred(pred, label):
+    label_dict = {
+         0:(0, 0, 0),
+         1:(128, 64, 128),
+         2:(70, 70, 70),
+         3:(153, 153, 153), 
+         4:(107, 142, 35),
+         5:(70, 130, 180),
+         6:(220, 20, 60),
+         7:(0, 0, 142),    
+        }
+
+
+    soft = torch.nn.functional.softmax(pred, dim=1)
+    arg = torch.argmax(soft, dim=1).squeeze(0)
+
+    rgb_tensor = torch.zeros(arg.shape[0], arg.shape[1], 3, dtype=torch.uint8)
+
+    colors = torch.tensor([label_dict[i] for i in range(len(label_dict))], dtype=torch.uint8)
+
+    rgb_tensor[:] = colors[arg]
+
+    return rgb_tensor
+    # ishow(label)
+
+
+def pred_loss_prep(xb):
+    softmax = torch.nn.functional.softmax(xb, dim=1)
+    argmax = torch.argmax(softmax, dim=1)
+
+    binary_masks = torch.zeros_like(xb)
+    for class_index in range(xb.shape[1]):
+        class_mask = (argmax == class_index).float()
+        binary_masks[:, class_index, :, :] = class_mask
+
+    return binary_masks
+
+
+def label_loss_prep(yb): 
+    label_dict = {
+        (0, 0, 0) : 0,
+        (128, 64, 128) : 1,
+        (70, 70, 70) : 2,
+        (153, 153, 153) : 3, 
+        (107, 142, 35) : 4,
+        (70, 130, 180) : 5,
+        (220, 20, 60) : 6,
+        (0, 0, 142) : 7
+        }
+    
+    class_masks = torch.zeros(8, yb.shape[0], yb.shape[1])
+    for color, class_index in label_dict.items():
+        color_mask = torch.all(yb == torch.tensor(color).view(1, 1, 3), dim=-1).float()
+        class_masks[class_index, :, :] = color_mask
+    
+    return class_masks

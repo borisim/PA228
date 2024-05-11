@@ -1,10 +1,10 @@
 import sys
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
+# from pa228_tools import ishow
 from pa228_tools import ishow
-
 import torch
 import pandas as pd
-from torchview import draw_graph
+# from torchview import draw_graph
 # from network import ModelExample
 from dataset import SampleDataset
 from sklearn.model_selection import train_test_split
@@ -16,7 +16,7 @@ import numpy as np
 import glob
 
 # dataset_path = "/home/borisim/Documents/school/pa228/project/Project_Template/PROJCODE_UCO/data"
-dataset_path = 'C:/Users/xboril/Documents/proj/PA228/data'
+dataset_path = 'data'
 PATH = Path('{}'.format(dataset_path), 'data_seg_public')
 img_dir = PATH / 'img'
 mask_dir = PATH / 'mask'
@@ -50,6 +50,8 @@ traindataset, valdataset = SampleDataset(train_df, transforms), SampleDataset(va
 model = SampleModel(num_class=8)
 IDX = 2285
 x, y = traindataset[IDX]
+print('ahoj')
+ishow(y)
 pred = model(x.unsqueeze(0))
 # torch.save(model, 'model.pt')
 

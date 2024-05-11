@@ -248,7 +248,6 @@ def classwise_iou_mask_4_img_pair(img_ref, img_pre):
 def compute_avg_iou_mask(project_code, folder_ref, folder_pre):
 	# reading the images
 	ref_files = sorted([f for f in os.listdir(folder_ref)])
-	print(len(ref_files))
 	pre_files = sorted([f for f in os.listdir(folder_pre)])
 
 	score_global = [0., 0., 0., 0., 0., 0., 0., 0.]
@@ -261,7 +260,7 @@ def compute_avg_iou_mask(project_code, folder_ref, folder_pre):
 		score_global = [a + b if a is not None else b for a, b in zip(score_class_wise_pair, score_global)]
 		n_class_img = [b + 1 if a is not None else b for a, b in zip(score_class_wise_pair, n_class_img)]
 
-	score_global = [a / n_cl for a, n_cl in zip(score_global, n_class_img)]
+	score_global = [a / (n_cl + 0.000001) for a, n_cl in zip(score_global, n_class_img)]
 	print(f'class-wise scores = {score_global}')
 	final_score = multiply_by_weights(score_global)
 	return final_score

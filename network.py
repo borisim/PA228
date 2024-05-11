@@ -7,74 +7,108 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 import torch
+import torch.nn as nn
+from torchvision import models
+from torch.nn.functional import relu
 
 
-class Block(nn.Module):
-    def __init__(self, in_ch, out_ch):
+class UNet(nn.Module):
+    def __init__(self, n_class):
         super().__init__()
-        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1, padding_mode='zeros')
-        self.relu  = nn.ReLU()
-        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1, padding_mode='zeros')
-    
-    def forward(self, x):
-        return self.conv2(self.relu(self.conv1(x)))
-
-
-class Encoder(nn.Module):
-    def __init__(self, chs=(3,64,128,256,512,1024)):
-        super().__init__()
-        self.enc_blocks = nn.ModuleList([Block(chs[i], chs[i+1]) for i in range(len(chs)-1)])
-        self.pool       = nn.MaxPool2d(2)
-    
-    def forward(self, x):
-        ftrs = []
-        for block in self.enc_blocks[:-1]:
-            x = block(x)
-            ftrs.append(x)
-            x = self.pool(x)
-            
-        x = self.enc_blocks[-1](x)
-        ftrs.append(x)
         
-        return ftrs
+        # Encoder
+        # In the encoder, convolutional layers with the Conv2d function are used to extract features from the input image. 
+        # Each block in the encoder consists of two convolutional layers followed by a max-pooling layer, with the exception 
+        # of the last block which does not include a max-pooling layer.
+        # -------
+        # input: 572x572x3
+        self.e11 = nn.Conv2d(3, 64, kernel_size=3, padding=1) # output: 570x570x64
+        self.e12 = nn.Conv2d(64, 64, kernel_size=3, padding=1) # output: 568x568x64
+        self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2) # output: 284x284x64
+
+        # input: 284x284x64
+        self.e21 = nn.Conv2d(64, 128, kernel_size=3, padding=1) # output: 282x282x128
+        self.e22 = nn.Conv2d(128, 128, kernel_size=3, padding=1) # output: 280x280x128
+        self.pool2 = nn.MaxPool2d(kernel_size=2, stride=2) # output: 140x140x128
+
+        # input: 140x140x128
+        self.e31 = nn.Conv2d(128, 256, kernel_size=3, padding=1) # output: 138x138x256
+        self.e32 = nn.Conv2d(256, 256, kernel_size=3, padding=1) # output: 136x136x256
+        self.pool3 = nn.MaxPool2d(kernel_size=2, stride=2) # output: 68x68x256
+
+        # input: 68x68x256
+        self.e41 = nn.Conv2d(256, 512, kernel_size=3, padding=1) # output: 66x66x512
+        self.e42 = nn.Conv2d(512, 512, kernel_size=3, padding=1) # output: 64x64x512
+        self.pool4 = nn.MaxPool2d(kernel_size=2, stride=2) # output: 32x32x512
+
+        # input: 32x32x512
+        self.e51 = nn.Conv2d(512, 1024, kernel_size=3, padding=1) # output: 30x30x1024
+        self.e52 = nn.Conv2d(1024, 1024, kernel_size=3, padding=1) # output: 28x28x1024
 
 
-class Decoder(nn.Module):
-    def __init__(self, chs=(1024, 512, 256, 128, 64)):
-        super().__init__()
-        self.chs         = chs
-        self.upconvs    = nn.ModuleList([nn.ConvTranspose2d(chs[i], chs[i+1], 2, 2) for i in range(len(chs)-1)])
-        self.dec_blocks = nn.ModuleList([Block(chs[i], chs[i+1]) for i in range(len(chs)-1)]) 
-        
-    def forward(self, x, encoder_features):
-        for i in range(len(self.chs)-1):
-            x        = self.upconvs[i](x)
-            #enc_ftrs = self.crop(encoder_features[i], x)
-            x        = torch.cat([x, encoder_features[i]], dim=1)
-            x        = self.dec_blocks[i](x)
-        return x
+        # Decoder
+        self.upconv1 = nn.ConvTranspose2d(1024, 512, kernel_size=2, stride=2)
+        self.d11 = nn.Conv2d(1024, 512, kernel_size=3, padding=1)
+        self.d12 = nn.Conv2d(512, 512, kernel_size=3, padding=1)
+
+        self.upconv2 = nn.ConvTranspose2d(512, 256, kernel_size=2, stride=2)
+        self.d21 = nn.Conv2d(512, 256, kernel_size=3, padding=1)
+        self.d22 = nn.Conv2d(256, 256, kernel_size=3, padding=1)
+
+        self.upconv3 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.d31 = nn.Conv2d(256, 128, kernel_size=3, padding=1)
+        self.d32 = nn.Conv2d(128, 128, kernel_size=3, padding=1)
+
+        self.upconv4 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.d41 = nn.Conv2d(128, 64, kernel_size=3, padding=1)
+        self.d42 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
+
+        # Output layer
+        self.outconv = nn.Conv2d(64, n_class, kernel_size=1)
     
-    def crop(self, enc_ftrs, x):
-        _, _, H, W = x.shape
-        enc_ftrs   = torchvision.transforms.CenterCrop([H, W])(enc_ftrs)
-        return enc_ftrs
-
-
-class SampleModel(nn.Module):
-    def __init__(self, enc_chs=(3,64,128,256,512,1024), dec_chs=(1024, 512, 256, 128, 64), num_class=1, retain_dim=False, out_sz=(572,572)):
-        super().__init__()
-        self.encoder     = Encoder(enc_chs)
-        self.decoder     = Decoder(dec_chs)
-        self.head        = nn.Conv2d(dec_chs[-1], num_class, 1)
-        self.retain_dim  = retain_dim
-        self.out_sz = out_sz
-
     def forward(self, x):
-        enc_ftrs = self.encoder(x)
-        out      = self.decoder(enc_ftrs[::-1][0], enc_ftrs[::-1][1:])
-        out      = self.head(out)
+        # Encoder
+        xe11 = relu(self.e11(x))
+        xe12 = relu(self.e12(xe11))
+        xp1 = self.pool1(xe12)
 
-        if self.retain_dim:
-            out = F.interpolate(out, self.out_sz)
-            
+        xe21 = relu(self.e21(xp1))
+        xe22 = relu(self.e22(xe21))
+        xp2 = self.pool2(xe22)
+
+        xe31 = relu(self.e31(xp2))
+        xe32 = relu(self.e32(xe31))
+        xp3 = self.pool3(xe32)
+
+        xe41 = relu(self.e41(xp3))
+        xe42 = relu(self.e42(xe41))
+        xp4 = self.pool4(xe42)
+
+        xe51 = relu(self.e51(xp4))
+        xe52 = relu(self.e52(xe51))
+        
+        # Decoder
+        xu1 = self.upconv1(xe52)
+        xu11 = torch.cat([xu1, xe42], dim=1)
+        xd11 = relu(self.d11(xu11))
+        xd12 = relu(self.d12(xd11))
+
+        xu2 = self.upconv2(xd12)
+        xu22 = torch.cat([xu2, xe32], dim=1)
+        xd21 = relu(self.d21(xu22))
+        xd22 = relu(self.d22(xd21))
+
+        xu3 = self.upconv3(xd22)
+        xu33 = torch.cat([xu3, xe22], dim=1)
+        xd31 = relu(self.d31(xu33))
+        xd32 = relu(self.d32(xd31))
+
+        xu4 = self.upconv4(xd32)
+        xu44 = torch.cat([xu4, xe12], dim=1)
+        xd41 = relu(self.d41(xu44))
+        xd42 = relu(self.d42(xd41))
+
+        # Output layer
+        out = self.outconv(xd42)
+
         return out

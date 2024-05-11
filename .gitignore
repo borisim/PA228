@@ -1,2 +1,11 @@
 data/
 model.pt
+new01.pt
+new02.pt
+output_predictions
+output_reference
+data_test
+data_seg_public.zip?predmet=1553781
+ce026_all.pt
+ce030_all.pt
+models
