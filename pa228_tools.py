@@ -80,6 +80,15 @@ def validate(model, valid_dl, loss_func, dev, opt=None):
         return np.sum(np.multiply(losses, nums)) / np.sum(nums)
 
 
+
+
+
+
+
+
+
+
+
 def plot_seg_result(pred):
     
     # validate the input shape
@@ -118,30 +127,9 @@ def show_seg_sample(sample):
     plt.show()
 
 
-def plot_pred(pred, label):
-    label_dict = {
-         0:(0, 0, 0),
-         1:(128, 64, 128),
-         2:(70, 70, 70),
-         3:(153, 153, 153), 
-         4:(107, 142, 35),
-         5:(70, 130, 180),
-         6:(220, 20, 60),
-         7:(0, 0, 142),    
-        }
 
 
-    soft = torch.nn.functional.softmax(pred, dim=1)
-    arg = torch.argmax(soft, dim=1).squeeze(0)
 
-    rgb_tensor = torch.zeros(arg.shape[0], arg.shape[1], 3, dtype=torch.uint8)
-
-    colors = torch.tensor([label_dict[i] for i in range(len(label_dict))], dtype=torch.uint8)
-
-    rgb_tensor[:] = colors[arg]
-
-    return rgb_tensor
-    # ishow(label)
 
 
 def pred_loss_prep(xb):

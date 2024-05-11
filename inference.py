@@ -97,9 +97,9 @@ def inference(dataset_path, model_path, n_samples):
 
         filename = f"output_predictions/{name}".format(name)  
         io.imsave(filename, arg)
-        filename = f"output_reference/{name}".format(name)  
-        io.imsave(filename, y.numpy().astype(np.uint8))
-        print(i)
+        # filename = f"output_reference/{name}".format(name)  
+        # io.imsave(filename, y.numpy().astype(np.uint8))
+        # print(i)
 
     return
 

@@ -1,34 +1,31 @@
-# STUDENT's UCO: 000000
+# STUDENT's UCO: 519192
 
 # Description:
 # This file should be used for performing training of a network
 # Usage: python training.py <path_2_dataset>
 
 import sys
-import matplotlib.pyplot as plt
-
+import glob
 import torch
-import pandas as pd
+import torch.nn as nn
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
 from tqdm.notebook import tqdm
-# from torchview import draw_graph
+from torchview import draw_graph
 from network import UNet
-from dataset import SampleDataset
+from dataset import SEGDataset
 from sklearn.model_selection import train_test_split
 from pathlib import Path
-from pa228_tools import train, validate
-import glob
-import torch.nn as nn
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
 
-
 # sample function for model architecture visualization
+# saves visualization of model architecture to the model_architecture.png
 # draw_graph function saves an additional file: Graphviz DOT graph file, it's not necessary to delete it
-def draw_network_architecture(network, input_sample):
-    # saves visualization of model architecture to the model_architecture.png
-    model_graph = draw_graph(network, input_sample, graph_dir='LR', save_graph=True, filename="model_architecture")
+def draw_network_architecture(network):
+    model_graph = draw_graph(network, input_size=(1,3,512,1024), graph_dir='LR', save_graph=True, filename="model_architecture")
 
 
 # sample function for losses visualization
@@ -43,33 +40,63 @@ def plot_learning_curves(train_losses, validation_losses):
     plt.savefig("learning_curves.png")
 
 
-# sample function for training
-def fit(net, batch_size, epochs, trainloader, validloader, loss_fn, optimizer, device):
+def loss_batch(model, loss_func, xb, yb, dev, opt=None):
+    xb, yb = xb.to(dev), yb.to(dev)
+    loss = loss_func(model(xb), yb)
+
+    if opt is not None:
+        loss.backward()
+        opt.step()
+        opt.zero_grad()
+
+    return loss.item(), len(xb)
+
+
+def train(model, train_dl, loss_func, dev, opt):
+        model.train()
+        loss, size = 0, 0
+        for b_idx, (xb, yb) in tqdm(enumerate(train_dl), total=len(train_dl), leave=False): # tqdm didnt work, hence the print
+            b_loss, b_size = loss_batch(model, loss_func, xb, yb, dev, opt)
+            loss += b_loss * b_size
+            size += b_size
+            # print(b_idx)
+            
+        return loss / size
+    
+    
+def validate(model, valid_dl, loss_func, dev, opt=None):
+        model.eval()
+        with torch.no_grad():
+            losses, nums = zip(
+                *[loss_batch(model, loss_func, xb, yb, dev) for xb, yb in valid_dl]
+            )
+            
+        return np.sum(np.multiply(losses, nums)) / np.sum(nums)
+
+
+def fit(net, epochs, trainloader, validloader, loss_fn, optimizer, device):
     train_losses = []
     validation_losses = []
 
-    worst = 3
+    best = 3
     for epoch in tqdm(range(epochs), 'epochs'):
-        print('training')
+        # print('training')
         loss = train(net, trainloader, loss_fn, device, optimizer)
-        print('validating')
+        # print('validating')
         val_loss = validate(net, validloader, loss_fn, device)
 
         train_losses.append(loss)
         validation_losses.append(val_loss)
         print(f'epoch {epoch+1}/{epochs}, loss: {loss : .05f}, validation loss: {val_loss:.05f}')
 
-        if loss < worst:
-            worst = loss
-            torch.save(net, 'model.pt'.format(epoch))
+        if loss < best:
+            best = loss
+            torch.save(net, 'model.pt')
 
-        plot_learning_curves(train_losses, validation_losses)
-      
     print('Training finished!')
     return train_losses, validation_losses
 
 
-# declaration for this function should not be changed
 def training(dataset_path):
     """
     training(dataset_path) performs training on the given dataset;
@@ -89,7 +116,7 @@ def training(dataset_path):
 
     config = {
     'batch_size': 5,
-    'epoch': 40,
+    'epoch': 0,
     'num_workers': 1,
     'dropout': 0.5,
     'lr': 0.0001,
@@ -104,18 +131,22 @@ def training(dataset_path):
     df = pd.DataFrame({'img': img_files, 'mask': mask_files})
     train_df, valid_df = train_test_split(df, test_size=.2, random_state=2)
 
+    # train_df, test_df = train_test_split(df, test_size=.3, random_state=1)
+    # train_df, valid_df = train_test_split(train_df, test_size=.3, random_state=2)
+
     transforms = A.Compose([
                             A.HorizontalFlip(p=0.5),  
-                            # A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.5),  
                             A.GaussianBlur(blur_limit=(3, 7), p=0.5),  
-
+                            # A.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1, p=0.5),  
+                            # A.ShiftScaleRotate(rotate_limit=30, p=1, border_mode=0, value=0, mask_value=3),
+                            
                             A.Normalize(mean=(0.3210, 0.2343, 0.2740), std=(0.1852, 0.1621, 0.1804)),
                             ToTensorV2(),
                             ]   
                         )
 
-    traindataset = SampleDataset(train_df, transforms=transforms)
-    valdataset = SampleDataset(valid_df, transforms=transforms)
+    traindataset = SEGDataset(train_df, transforms=transforms)
+    valdataset = SEGDataset(valid_df, transforms=transforms)
     
     trainloader = torch.utils.data.DataLoader(traindataset,
                       batch_size=config['batch_size'],
@@ -127,41 +158,17 @@ def training(dataset_path):
                       shuffle=False,
                       num_workers=config['num_workers'])
 
-
-    class SoftDiceLoss(nn.Module):
-        def __init__(self):
-            super(SoftDiceLoss, self).__init__()
-
-        def forward(self, input, target):
-            smooth = 1
-
-            input_flat = input.flatten(2).sigmoid()
-            target_flat = target.flatten(2)
-            
-            intersection = torch.sum(input_flat * target_flat, dim=-1)
-            union = input_flat.sum(dim=-1) + target_flat.sum(dim=-1)
-            dice_coeff = (2. * intersection + smooth) / (union + smooth)
-
-            return 1 - dice_coeff.mean()
-
-    
     net = UNet(config['n_classes'])
     net.to(device)
-    # loss_fn = SoftDiceLoss()
+    draw_network_architecture(net)
+
     loss_fn = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(net.parameters(), lr=config['lr'])
 
-    tr_losses, val_losses = fit(net, config['batch_size'], config['epoch'], trainloader, valloader, loss_fn, optimizer, device)
+    tr_losses, val_losses = fit(net, config['epoch'], trainloader, valloader, loss_fn, optimizer, device)
     
-    # draw_network_architecture(net, input_sample)
     plot_learning_curves(tr_losses, val_losses)
     return
-
-    # 6h+, 30 epoch, 0.63%
-    # new02 0.63%
-    # new01 0.63%
-    # ce026 0.40%
-
 
 
 # #### code below should not be changed ############################################################################
